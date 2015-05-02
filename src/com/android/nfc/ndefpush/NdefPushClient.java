@@ -1,0 +1,221 @@
+/*
+ * Copyright (C) 2011 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.android.nfc.ndefpush;
+
+import com.android.nfc.DeviceHost.LlcpSocket;
+import com.android.nfc.LlcpException;
+import com.android.nfc.NfcService;
+
+import android.nfc.NdefMessage;
+import android.util.Log;
+
+import java.io.IOException;
+import java.util.Arrays;
+
+// Added imports
+import java.io.BufferedReader;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+
+import java.nio.charset.Charset;
+import android.nfc.NdefRecord;
+
+import java.net.Socket;
+import java.io.OutputStream;
+import java.net.InetAddress;
+import java.net.SocketAddress;
+import java.net.InetSocketAddress;
+
+/**
+ * Simple client to push the local NDEF message to a server on the remote side of an
+ * LLCP connection, using the Android Ndef Push Protocol.
+ */
+public class NdefPushClient {
+  private static final String TAG = "NdefPushClient";
+  private static final int MIU = 128;
+  private static final boolean DBG = true;
+
+  // Added fields
+  //private String serverHostname = null;
+  private int serverPort = 3333;
+  //private InputStream sockInput = null;
+  private OutputStream sockOutput = null;
+
+  public boolean push(NdefMessage msg) {
+    NfcService service = NfcService.getInstance();
+
+    /* read Server IP address from file /sdcard/server_ip.txt */ 
+    String fileName = "/sdcard/server_ip.txt";
+    String MfileName = "/sdcard/message_size.txt";
+    byte[] serverIp = null;
+    FileReader file = null;
+    FileReader Mfile = null;
+    String message = null;
+
+    try {
+      file = new FileReader(fileName);
+      BufferedReader reader = new BufferedReader(file);
+      
+      if (DBG) Log.d(TAG, "Reading file server_ip.txt");
+
+      Mfile = new FileReader(MfileName);
+      BufferedReader Mreader = new BufferedReader(Mfile);
+      
+      if (DBG) Log.d(TAG, "Reading file message_size.txt");
+
+      String ipAddress = reader.readLine();
+      message = Mreader.readLine();
+      
+      if (DBG) Log.d(TAG, "Read from file, splitting text.");
+
+      String[] ipArray = ipAddress.split("\\.");
+      serverIp = new byte[4];
+      
+      if (DBG) Log.d(TAG, "Split string: " + ipAddress + " into array size: " + ipArray.length);
+
+      for(int i=0; i<4; i++) {
+        
+        if (DBG) Log.d(TAG, "Parse String i: " + i);
+        serverIp[i] = (byte)Integer.parseInt(ipArray[i]);
+        if (DBG) Log.d(TAG, "serverIp[i]: " + serverIp[i]);
+      
+      }
+
+      if (DBG) Log.d(TAG, "Parse String array into byte array.");
+
+    } catch (FileNotFoundException e) {
+      //throw new RuntimeException("File not found");
+      if (DBG) Log.d(TAG, "Serve IP or message file not found");
+      serverIp = new byte[]{127, 0, 0, 1};
+    } catch (IOException e) {
+      throw new RuntimeException("IO Error occured");
+    } finally {
+      if (file != null) {
+        try {
+          file.close();
+	  Mfile.close();
+        } catch (IOException e) {
+          e.printStackTrace();
+        }
+      }
+    }
+
+    // We only handle a single immediate action for now
+    //^NdefPushProtocol proto = new NdefPushProtocol(msg, NdefPushProtocol.ACTION_IMMEDIATE);
+
+
+    //String mimeType = "application/com.tapped.nfc";
+    //String message = Text.hundredB;
+
+    /*if (messageF.equals("1")) {
+ 	message = Text.hundredB;
+    }
+    else if (messageF.equals("2")) {
+	message = Text.fivehundredB;
+    }
+    else if (messageF.equals("3")) {
+	message = Text.oneK;
+    }
+    else if (messageF.equals("4")) {
+	message = Text.fiftyK;
+    }
+    else if (messageF.equals("5")) {
+	message = Text.hundredK;
+    }
+    else if (messageF.equals("6")) {
+	message = Text.fivehundredK;
+    }
+    else if (messageF.equals("7")) {
+	message = Text.oneM;
+    }
+    else if (messageF.equals("8")) {
+	message = Text.twoM;
+    }
+    else if (messageF.equals("9")) {
+	message = Text.hundredfiftytwoK;
+    }
+    else {
+	if (DBG) Log.d(TAG, "Invalid input from message file.");
+    }
+    */
+
+    //byte[] mimeBytes = mimeType.getBytes(Charset.forName("US-ASCII"));
+    //NdefRecord mimeRecord = new NdefRecord(NdefRecord.TNF_MIME_MEDIA, mimeBytes, new byte[0], message.getBytes());
+    //msg = new NdefMessage(new NdefRecord[] { mimeRecord });
+
+
+    NdefPushProtocol proto = new NdefPushProtocol(msg, NdefPushProtocol.ACTION_IMMEDIATE);
+    byte[] buffer = proto.toByteArray();
+    int offset = 0;
+    int remoteMiu;
+
+    //LlcpSocket sock = null;
+    Socket sock = null;
+
+    try {
+      if (DBG) Log.d(TAG, "about to create socket");
+
+      // Connect to the my tag server on the remote side
+      //sock = service.createLlcpSocket(0, MIU, 1, 1024);
+      //sock = new Socket (serverHostname, serverPort);
+      sock = new Socket();
+
+      if (sock == null) {
+        throw new IOException("Could not connect to socket.");
+      }
+      if (DBG) Log.d(TAG, "about to connect to service " + NdefPushServer.SERVICE_NAME);
+
+      //sock.connectToService(NdefPushServer.SERVICE_NAME);
+      InetAddress inetAddress = InetAddress.getByAddress(serverIp);
+      SocketAddress socketAddress = new InetSocketAddress(inetAddress, serverPort);			
+      sock.connect(socketAddress, 30000);
+      //sockInput = sock.getInputStream();
+      //sockOutput = sock.getOutputStream();
+      //remoteMiu = sock.getRemoteMiu();
+      remoteMiu = sock.getSendBufferSize();
+
+      if (DBG) Log.d(TAG, "about to send a " + buffer.length + " byte message");
+      while (offset < buffer.length) {
+        int length = Math.min(buffer.length - offset, remoteMiu);
+        //int length = buffer.length - offset;
+        byte[] tmpBuffer = Arrays.copyOfRange(buffer, offset, offset+length);
+        if (DBG) Log.d(TAG, "about to send a " + length + " byte packet");
+        sockOutput = sock.getOutputStream();                
+        sockOutput.write(tmpBuffer, 0, length);
+        offset += length;
+      }
+      return true;
+    } catch (IOException e) {
+      Log.e(TAG, "couldn't send tag");
+      if (DBG) Log.d(TAG, "exception:", e);
+      //} catch (LlcpException e) {
+      //  // Most likely the other side doesn't support the my tag protocol
+      //  Log.e(TAG, "couldn't send tag");
+      //  if (DBG) Log.d(TAG, "exception:", e);
+  } finally {
+    if (sock != null) {
+      try {
+        if (DBG) Log.d(TAG, "about to close sock");
+        sock.close();
+      } catch (IOException e) {
+	if (DBG) Log.d(TAG, "failed to close sock");
+      }
+    }
+  }
+  return false;
+  }
+}
